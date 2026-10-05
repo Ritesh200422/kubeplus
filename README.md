@@ -101,7 +101,7 @@ For testing purposes you can create a [minikube](https://minikube.sigs.k8s.io/do
 5. **Install KubePlus Operator using the generated provider kubeconfig:**
 
    ```sh
-   helm install kubeplus "https://github.com/cloud-ark/operatorcharts/blob/master/kubeplus-chart-4.2.0.tgz?raw=true" --kubeconfig=kubeplus-saas-provider.json -n $KUBEPLUS_NS
+   helm install kubeplus "https://github.com/cloud-ark/operatorcharts/blob/master/kubeplus-chart-4.2.1.tgz?raw=true" --kubeconfig=kubeplus-saas-provider.json -n $KUBEPLUS_NS
    until kubectl get pods -A | grep kubeplus | grep Running; do echo "Waiting for KubePlus to start.."; sleep 1; done
    ```
 
@@ -205,13 +205,11 @@ We have developed the [Operator Maturity Model](https://github.com/cloud-ark/kub
 
 ## Community Meetings
 
-We meet every Tuesday at 11.30 a.m. US CST. We use Slack huddle in `#kubeplus` channel on CNCF workspace
+We meet every Monday at 10.00 a.m. US CST. We use Slack huddle in `#kubeplus` channel on CNCF workspace
 The meeting agenda is [here](https://docs.google.com/document/d/18PDo2XtvspP__3EemADyHh94O1-yActrLMCOntOiv1Y/edit?usp=sharing).
 Please join us in our meetings. Your participation is welcome.
 
 ## Contact
 
-Subscribe to [KubePlus mailing list](https://groups.google.com/g/kubeplus).
-
 Join #kubeplus channel on [CNCF Slack](https://cloud-native.slack.com/archives/C06U6MP24PN).
-If you don't have an account on the CNCF workspace, get your invitation [here](https://communityinviter.com/apps/cloud-native/cncf). You can join the `#kubeplus` channel once your invitation is active.
+If you don't have an account on the CNCF workspace, get your invitation [here](https://slack.cncf.io). You can join the `#kubeplus` channel once your invitation is active.
