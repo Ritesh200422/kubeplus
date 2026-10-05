@@ -32,6 +32,7 @@ import (
 	
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/httpstream"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/remotecommand"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -195,46 +196,37 @@ func getChartValues(request *restful.Request, response *restful.Response) {
 }
 
 func getKubePlusPod() string {
-	podName := ""
-	/*
-	deploymentObj, err1 := kubeClient.AppsV1().Deployments(KUBEPLUS_NAMESPACE).Get(KUBEPLUS_DEPLOYMENT, metav1.GetOptions{})
-	if err1 != nil {
-		fmt.Printf("Error:%v\n", err1)
-		return podName
-	}*/
-	replicaSetList, err2 := kubeClient.AppsV1().ReplicaSets(KUBEPLUS_NAMESPACE).List(context.Background(), metav1.ListOptions{})
-	if err2 != nil {
-		fmt.Printf("Error:%v\n", err2)
-		return podName
-	}
-	replicaSetName := ""
-	for _, repSetObj := range replicaSetList.Items {
-		ownerRefObj := repSetObj.ObjectMeta.OwnerReferences[0]
-		depOwnerName := ownerRefObj.Name
-		if depOwnerName == KUBEPLUS_DEPLOYMENT {
-			replicaSetName = repSetObj.ObjectMeta.Name
-			//fmt.Printf("DepOwnerName:%s, RSSetName:%s\n", depOwnerName, replicaSetName)
-			break
-		}
+	deployment, err := kubeClient.AppsV1().Deployments(KUBEPLUS_NAMESPACE).Get(
+		context.Background(), KUBEPLUS_DEPLOYMENT, metav1.GetOptions{},
+	)
+	if err != nil {
+		fmt.Printf("Error getting KubePlus deployment: %v\n", err)
+		return ""
 	}
 
-	podList, err3 := kubeClient.CoreV1().Pods(KUBEPLUS_NAMESPACE).List(context.Background(), metav1.ListOptions{})
-	if err3 != nil {
-		fmt.Printf("Error:%v\n", err3)
-		return podName
+	selector, err := metav1.LabelSelectorAsSelector(deployment.Spec.Selector)
+	if err != nil {
+		fmt.Printf("Error reading KubePlus deployment selector: %v\n", err)
+		return ""
+	}
+
+	podList, err := kubeClient.CoreV1().Pods(KUBEPLUS_NAMESPACE).List(
+		context.Background(), metav1.ListOptions{LabelSelector: selector.String()},
+	)
+	if err != nil {
+		fmt.Printf("Error listing KubePlus pods: %v\n", err)
+		return ""
 	}
 	for _, podObj := range podList.Items {
-		if podObj.ObjectMeta.OwnerReferences != nil {
-			ownerRefObj := podObj.ObjectMeta.OwnerReferences[0]
-			podOwnerName := ownerRefObj.Name
-			if podOwnerName == replicaSetName {
-				podName = podObj.ObjectMeta.Name
-				//fmt.Printf("RSSetName:%s, PodName:%s\n", replicaSetName, podName)
-				break
+		if podObj.DeletionTimestamp == nil && podObj.Status.Phase == corev1.PodRunning {
+			for _, containerStatus := range podObj.Status.ContainerStatuses {
+				if containerStatus.Name == CMD_RUNNER_CONTAINER && containerStatus.Ready {
+					return podObj.Name
+				}
 			}
 		}
 	}
-	return podName
+	return ""
 }
 
 func deleteChartCRDs(request *restful.Request, response *restful.Response) {
@@ -1299,10 +1291,24 @@ func executeExecCall(runner, command string) (bool, string) {
 		TTY:    false,
 	}, parameterCodec)
 
-	exec, err := remotecommand.NewSPDYExecutor(cfg, "POST", req.URL())
+	spdyExecutor, err := remotecommand.NewSPDYExecutor(cfg, "POST", req.URL())
 	if err != nil {
 		responseString := "Error: " + err.Error()
 		fmt.Printf("Error found trying to Exec command on pod: %s \n", responseString)
+		return false, responseString
+	}
+
+	websocketExecutor, err := remotecommand.NewWebSocketExecutor(cfg, "GET", req.URL().String())
+	if err != nil {
+		responseString := "Error: " + err.Error()
+		fmt.Printf("Error found trying to create WebSocket executor: %s \n", responseString)
+		return false, responseString
+	}
+
+	exec, err := remotecommand.NewFallbackExecutor(websocketExecutor, spdyExecutor, httpstream.IsUpgradeFailure)
+	if err != nil {
+		responseString := "Error: " + err.Error()
+		fmt.Printf("Error found trying to create fallback executor: %s \n", responseString)
 		return false, responseString
 	}
 
